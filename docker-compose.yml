@@ -1,0 +1,177 @@
+# Ring of the Middle Earth — infrastructure + application stack.
+#
+# Phase 0 brings up only the Kafka backbone (3 brokers in KRaft mode),
+# the Confluent Schema Registry, and a Kafka web UI. Application services
+# (engine + api, 3 instances) are added in later phases under profiles so
+# `docker compose up` in early phases stays fast.
+#
+# Listener design (important):
+#   - INTERNAL  (19092): used by other containers (schema-registry, kafka-ui,
+#                        our Go services) to reach the brokers by hostname.
+#   - EXTERNAL  (9092..): used from the Windows host (kafka-ui browser,
+#                        manual kafka-console-consumer via `docker exec`).
+#   - CONTROLLER (9093): KRaft quorum traffic between brokers only.
+
+x-kafka-common: &kafka-common
+  image: confluentinc/cp-kafka:7.7.1
+  networks: [rotme]
+  healthcheck:
+    test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:19092"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 20s
+
+x-kafka-env: &kafka-env
+  KAFKA_PROCESS_ROLES: broker,controller
+  KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka1:9093,2@kafka2:9093,3@kafka3:9093
+  KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+  KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+  # A 3-broker cluster: defaults and the internal Kafka topics replicate 3x.
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+  KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+  KAFKA_MIN_INSYNC_REPLICAS: 2
+  KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+  # Fixed cluster id so the KRaft metadata log is stable across restarts.
+  CLUSTER_ID: rotme-kafka-cluster-0001
+
+# Shared definition for the three interchangeable Go engine instances. They
+# form one consumer group; exactly one is elected leader (spec section 26).
+x-engine: &engine
+  build:
+    context: .
+    dockerfile: option-b/Dockerfile
+  image: rotme-engine:latest
+  networks: [rotme]
+  depends_on:
+    schema-registry: {condition: service_healthy}
+  environment:
+    KAFKA_BROKERS: kafka1:19092,kafka2:19092,kafka3:19092
+    SCHEMA_REGISTRY_URL: http://schema-registry:8081
+    TURN_SECONDS: "30"
+    HTTP_ADDR: ":8080"
+  healthcheck:
+    test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/health"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 25s
+
+services:
+  kafka1:
+    <<: *kafka-common
+    hostname: kafka1
+    container_name: kafka1
+    ports:
+      - "9092:9092"
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:19092,EXTERNAL://localhost:9092
+    volumes:
+      - kafka1-data:/var/lib/kafka/data
+
+  kafka2:
+    <<: *kafka-common
+    hostname: kafka2
+    container_name: kafka2
+    ports:
+      - "9094:9094"
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka2:19092,EXTERNAL://localhost:9094
+    volumes:
+      - kafka2-data:/var/lib/kafka/data
+
+  kafka3:
+    <<: *kafka-common
+    hostname: kafka3
+    container_name: kafka3
+    ports:
+      - "9096:9096"
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9096
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka3:19092,EXTERNAL://localhost:9096
+    volumes:
+      - kafka3-data:/var/lib/kafka/data
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.7.1
+    hostname: schema-registry
+    container_name: schema-registry
+    networks: [rotme]
+    depends_on:
+      kafka1: {condition: service_healthy}
+      kafka2: {condition: service_healthy}
+      kafka3: {condition: service_healthy}
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka1:19092,PLAINTEXT://kafka2:19092,PLAINTEXT://kafka3:19092
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  kafka-ui:
+    image: kafbat/kafka-ui:latest
+    hostname: kafka-ui
+    container_name: kafka-ui
+    networks: [rotme]
+    depends_on:
+      schema-registry: {condition: service_started}
+    ports:
+      - "8088:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: rotme
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:19092,kafka2:19092,kafka3:19092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      DYNAMIC_CONFIG_ENABLED: "true"
+
+  go-1:
+    <<: *engine
+    hostname: go-1
+    container_name: go-1
+
+  go-2:
+    <<: *engine
+    hostname: go-2
+    container_name: go-2
+
+  go-3:
+    <<: *engine
+    hostname: go-3
+    container_name: go-3
+
+  lb:
+    image: nginx:alpine
+    container_name: lb
+    networks: [rotme]
+    depends_on: [go-1, go-2, go-3]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+
+networks:
+  rotme:
+    name: rotme
+
+volumes:
+  kafka1-data:
+  kafka2-data:
+  kafka3-data:

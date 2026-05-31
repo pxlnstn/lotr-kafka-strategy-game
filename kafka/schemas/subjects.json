@@ -1,0 +1,16 @@
+[
+  { "file": "OrderSubmitted.avsc",       "subject": "game.orders.raw-value" },
+  { "file": "OrderValidated.avsc",        "subject": "game.orders.validated-value" },
+  { "file": "RingBearerMoved.avsc",       "subject": "game.ring.position-value" },
+  { "file": "WorldStateSnapshot.avsc",    "subject": "game.broadcast-value" },
+  { "file": "GameOver.avsc",              "subject": "game.broadcast-GameOver" },
+  { "file": "GameSession.avsc",           "subject": "game.session-value" },
+  { "file": "DLQEntry.avsc",              "subject": "game.dlq-value" },
+  { "file": "UnitMoved.avsc",             "subject": "UnitMoved-value" },
+  { "file": "PathStatusChanged.avsc",     "subject": "PathStatusChanged-value" },
+  { "file": "PathCorrupted.avsc",         "subject": "PathCorrupted-value" },
+  { "file": "RegionControlChanged.avsc",  "subject": "RegionControlChanged-value" },
+  { "file": "BattleResolved.avsc",        "subject": "BattleResolved-value" },
+  { "file": "RingBearerDetected.avsc",    "subject": "RingBearerDetected-value" },
+  { "file": "RingBearerSpotted.avsc",     "subject": "RingBearerSpotted-value" }
+]

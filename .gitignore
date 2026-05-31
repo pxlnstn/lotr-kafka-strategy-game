@@ -1,0 +1,20 @@
+# Go
+/option-b/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Docker volumes / local data
+kafka-data/
+**/data/
+
+# Editor / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

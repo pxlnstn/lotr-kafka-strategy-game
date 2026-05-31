@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "GameSession",
+  "namespace": "rotr.events",
+  "fields": [
+    { "name": "gameId", "type": "string" },
+    { "name": "turn", "type": "int" },
+    { "name": "phase", "type": "string" },
+    { "name": "winner", "type": ["null", "string"], "default": null },
+    { "name": "worldJson", "type": ["null", "string"], "default": null },
+    { "name": "timestamp", "type": "long" }
+  ]
+}

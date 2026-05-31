@@ -1,0 +1,41 @@
+{
+  "type": "record",
+  "name": "WorldStateSnapshot",
+  "namespace": "rotr.events",
+  "fields": [
+    { "name": "turn", "type": "int" },
+    {
+      "name": "regions",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "RegionSnap",
+          "fields": [
+            { "name": "regionId", "type": "string" },
+            { "name": "controlledBy", "type": "string" },
+            { "name": "threatLevel", "type": "int" },
+            { "name": "fortified", "type": "boolean" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "units",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "UnitSnap",
+          "fields": [
+            { "name": "unitId", "type": "string" },
+            { "name": "region", "type": "string" },
+            { "name": "strength", "type": "int" },
+            { "name": "status", "type": "string" }
+          ]
+        }
+      }
+    },
+    { "name": "timestamp", "type": "long" }
+  ]
+}

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Ring of the Middle Earth - Architecture</title>
+<style>
+  @page { size: A4; margin: 18mm; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2a37; font-size: 11pt; line-height: 1.5; }
+  h1 { font-size: 22pt; border-bottom: 3px solid #2e9e6b; padding-bottom: 6px; }
+  h2 { font-size: 15pt; color: #16603f; margin-top: 22px; border-bottom: 1px solid #ddd; padding-bottom: 3px; }
+  h3 { font-size: 12pt; color: #333; margin-bottom: 4px; }
+  pre { background: #f5f4ee; border: 1px solid #e0ddd0; border-radius: 5px; padding: 10px; font-size: 8.5pt; line-height: 1.25; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 8px 0; }
+  th, td { border: 1px solid #ccc; padding: 4px 7px; text-align: left; vertical-align: top; }
+  th { background: #eef5f0; }
+  code { background: #f0eee6; padding: 0 3px; border-radius: 3px; font-size: 9.5pt; }
+  .muted { color: #5b6675; }
+  .pagebreak { page-break-before: always; }
+  svg.dgm { width: 100%; height: auto; display: block; margin: 8px 0 16px; }
+  .dgm text { font-family: 'Segoe UI', Arial, sans-serif; }
+  .dgm .t { font-size: 12px; font-weight: 700; fill: #1f2a37; }
+  .dgm .s { font-size: 9.5px; fill: #4b5563; }
+  .dgm .el { font-size: 9px; fill: #16603f; }
+  .dgm .box { fill: #fff; stroke: #9aa3af; stroke-width: 1.4; }
+  .dgm .lead { fill: #eaf7f0; stroke: #2e9e6b; stroke-width: 2; }
+  .dgm .kafka { fill: #fdf1e2; stroke: #d9a441; stroke-width: 1.4; }
+  .dgm .topic { fill: #fdf1e2; stroke: #d9a441; stroke-width: 1.2; }
+  .dgm .brow { fill: #eaf1fb; stroke: #4b7bec; stroke-width: 1.4; }
+  .dgm .browd { fill: #fdeaee; stroke: #eb3b5a; stroke-width: 1.4; }
+  .dgm .grey { fill: #eef0f3; stroke: #9aa3af; stroke-width: 1.4; }
+  .dgm .flow { stroke: #6b7280; stroke-width: 1.4; fill: none; }
+  .dgm .dash { stroke-dasharray: 5 4; }
+</style>
+</head>
+<body>
+
+<h1>Ring of the Middle Earth - Architecture Document</h1>
+<p class="muted">Distributed Application Development term project · Option B (Go) · Human-vs-Human strategy game on a Kafka event backbone.</p>
+
+<h2>1. Technology choice and overview</h2>
+<p>
+We built the system in <strong>Go</strong> (Option B). The game engine, the order-validation and route-risk
+services, the HTTP/SSE layer and the browser client are all Go plus vanilla JavaScript. A pure-Go Kafka client
+(<code>twmb/franz-go</code>) is used so the build needs no C toolchain, and Avro records are encoded with
+<code>hamba/avro</code> in the Confluent wire format (a magic byte, a 4-byte schema id, then the Avro body).
+The messaging tier - three Kafka brokers in KRaft mode, the Confluent Schema Registry and a Kafka web UI - runs in Docker.
+</p>
+<p>
+The application tier is three interchangeable engine instances (<code>go-1</code>, <code>go-2</code>, <code>go-3</code>)
+behind an nginx load balancer. Every instance can answer reads and accept orders. Exactly one instance is elected
+leader and runs the authoritative turn processing. All durable state lives in Kafka, so any instance can be killed and
+the survivors carry on. This is the central idea of the Go option: <em>the application tier is stateless, the broker
+holds the state.</em>
+</p>
+
+<h2>2. System diagram</h2>
+<svg class="dgm" viewBox="0 0 900 540" role="img" aria-label="System diagram">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <rect class="box brow" x="110" y="14" width="210" height="58" rx="10"/>
+  <text class="t" x="215" y="38" text-anchor="middle">Browser A &#8212; Light</text>
+  <text class="s" x="215" y="56" text-anchor="middle">GET /events (SSE) · POST /order</text>
+  <rect class="box browd" x="580" y="14" width="210" height="58" rx="10"/>
+  <text class="t" x="685" y="38" text-anchor="middle">Browser B &#8212; Dark</text>
+  <text class="s" x="685" y="56" text-anchor="middle">GET /events (SSE) · POST /order</text>
+
+  <rect class="box grey" x="345" y="118" width="210" height="52" rx="10"/>
+  <text class="t" x="450" y="140" text-anchor="middle">nginx load balancer  :8080</text>
+  <text class="s" x="450" y="158" text-anchor="middle">round-robin to any instance</text>
+
+  <rect class="box" x="70" y="232" width="210" height="76" rx="8"/>
+  <text class="t" x="175" y="256" text-anchor="middle">go-1</text>
+  <text class="s" x="175" y="274" text-anchor="middle">HTTP + SSE · hub cache</text>
+  <text class="s" x="175" y="292" text-anchor="middle">follower</text>
+  <rect class="box lead" x="345" y="232" width="210" height="76" rx="8"/>
+  <text class="t" x="450" y="256" text-anchor="middle">go-2  (LEADER)</text>
+  <text class="s" x="450" y="274" text-anchor="middle">HTTP + SSE · hub cache</text>
+  <text class="s" x="450" y="292" text-anchor="middle">authoritative turn processing</text>
+  <rect class="box" x="620" y="232" width="210" height="76" rx="8"/>
+  <text class="t" x="725" y="256" text-anchor="middle">go-3</text>
+  <text class="s" x="725" y="274" text-anchor="middle">HTTP + SSE · hub cache</text>
+  <text class="s" x="725" y="292" text-anchor="middle">follower</text>
+
+  <rect class="box kafka" x="70" y="392" width="500" height="120" rx="8"/>
+  <text class="t" x="320" y="418" text-anchor="middle">Kafka &#8212; 3 brokers, KRaft mode</text>
+  <text class="s" x="320" y="438" text-anchor="middle">10 topics · replication 3 · game.session compacted</text>
+  <text class="s" x="320" y="474" text-anchor="middle">orders.raw &#8594; orders.validated &#8594; events.* / broadcast / ring.* / session / dlq</text>
+  <rect class="box grey" x="600" y="392" width="230" height="120" rx="8"/>
+  <text class="t" x="715" y="432" text-anchor="middle">Schema Registry</text>
+  <text class="s" x="715" y="452" text-anchor="middle">Avro schemas + V2 evolution</text>
+
+  <line class="flow" x1="245" y1="72" x2="400" y2="116" marker-end="url(#arr)"/>
+  <line class="flow" x1="655" y1="72" x2="500" y2="116" marker-end="url(#arr)"/>
+  <text class="s" x="300" y="104">HTTP / SSE</text>
+  <line class="flow" x1="400" y1="170" x2="195" y2="230" marker-end="url(#arr)"/>
+  <line class="flow" x1="450" y1="170" x2="450" y2="230" marker-end="url(#arr)"/>
+  <line class="flow" x1="500" y1="170" x2="705" y2="230" marker-end="url(#arr)"/>
+  <line class="flow" x1="175" y1="308" x2="215" y2="390" marker-end="url(#arr)"/>
+  <line class="flow" x1="450" y1="308" x2="380" y2="390" marker-end="url(#arr)"/>
+  <text class="el" x="462" y="352">leader: produce events · consume validated</text>
+  <line class="flow" x1="725" y1="308" x2="525" y2="390" marker-end="url(#arr)"/>
+  <line class="flow" x1="570" y1="452" x2="600" y2="452" marker-end="url(#arr)"/>
+</svg>
+<p>
+Reads (<code>/game/state</code>, <code>/orders/available</code>, <code>/analysis/*</code>, <code>/events</code>) are served
+by any instance from a local cache that is rebuilt from Kafka. Order submission and the two control actions
+(start game, advance turn) are published to <code>game.orders.raw</code>; only the leader consumes and acts on them.
+</p>
+
+<h2>3. Goroutine map (Option B)</h2>
+<p>State is never shared by locking it; each long-lived goroutine owns its state and is reached through channels.
+Channel buffer capacities are shown in parentheses; every box lists its termination condition.</p>
+<svg class="dgm" viewBox="0 0 900 690" role="img" aria-label="Goroutine map">
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <text class="t" x="8" y="16">Kafka consumer goroutines &#8212; one per subscribed topic, on every instance &#183; term: ctx.Done</text>
+  <g>
+    <rect class="box" x="8"   y="26" width="120" height="44" rx="6"/><text class="s" x="68"  y="44" text-anchor="middle">consumeSnapshots</text><text class="s" x="68"  y="60" text-anchor="middle">broadcast</text>
+    <rect class="box" x="134" y="26" width="120" height="44" rx="6"/><text class="s" x="194" y="44" text-anchor="middle">consumeSession</text><text class="s" x="194" y="60" text-anchor="middle">session</text>
+    <rect class="box" x="260" y="26" width="120" height="44" rx="6"/><text class="s" x="320" y="44" text-anchor="middle">consumeEvents</text><text class="s" x="320" y="60" text-anchor="middle">events.unit</text>
+    <rect class="box" x="386" y="26" width="120" height="44" rx="6"/><text class="s" x="446" y="44" text-anchor="middle">consumeEvents</text><text class="s" x="446" y="60" text-anchor="middle">events.region</text>
+    <rect class="box" x="512" y="26" width="120" height="44" rx="6"/><text class="s" x="572" y="44" text-anchor="middle">consumeEvents</text><text class="s" x="572" y="60" text-anchor="middle">events.path</text>
+    <rect class="box" x="638" y="26" width="120" height="44" rx="6"/><text class="s" x="698" y="44" text-anchor="middle">consumeEvents</text><text class="s" x="698" y="60" text-anchor="middle">ring.position</text>
+    <rect class="box" x="764" y="26" width="120" height="44" rx="6"/><text class="s" x="824" y="44" text-anchor="middle">consumeEvents</text><text class="s" x="824" y="60" text-anchor="middle">ring.detection</text>
+  </g>
+
+  <line class="flow" x1="68"  y1="70" x2="200" y2="176" marker-end="url(#arr2)"/><text class="el" x="86" y="120">snapshotCh (16)</text>
+  <line class="flow" x1="194" y1="70" x2="270" y2="176" marker-end="url(#arr2)"/><text class="el" x="214" y="140">sessionCh (16)</text>
+  <line class="flow" x1="520" y1="70" x2="430" y2="176" marker-end="url(#arr2)"/><text class="el" x="470" y="120">events.* &amp; ring.* &#8594; eventsCh (100)</text>
+
+  <rect class="box" x="150" y="178" width="440" height="128" rx="8"/>
+  <text class="t" x="370" y="200" text-anchor="middle">Hub.run &#183; every instance &#183; select loop</text>
+  <text class="s" x="370" y="220" text-anchor="middle">owns the read cache + SSE client sets</text>
+  <text class="s" x="370" y="238" text-anchor="middle">in: eventsCh(100) snapshotCh(16) sessionCh(16) register/unregister(0)</text>
+  <text class="s" x="370" y="254" text-anchor="middle">analysisCh(16) stateCh(16) recoverCh(4) keepalive ticker(20s)</text>
+  <text class="s" x="370" y="272" text-anchor="middle">out: per-client SSE chan []byte (64)</text>
+  <text class="s" x="370" y="294" text-anchor="middle">term: ctx.Done &#8594; close every SSE chan, close h.closed</text>
+
+  <rect class="box" x="628" y="188" width="256" height="104" rx="8"/>
+  <text class="t" x="756" y="210" text-anchor="middle">SSE client goroutines</text>
+  <text class="s" x="756" y="230" text-anchor="middle">one per connected browser</text>
+  <text class="s" x="756" y="248" text-anchor="middle">chan []byte &#183; cap 64</text>
+  <text class="s" x="756" y="266" text-anchor="middle">fan-out enforces info-hiding</text>
+  <text class="s" x="756" y="284" text-anchor="middle">term: disconnect or ctx.Done</text>
+  <line class="flow" x1="590" y1="240" x2="628" y2="240" marker-end="url(#arr2)"/><text class="el" x="592" y="232">fan-out</text>
+
+  <rect class="box" x="8" y="352" width="276" height="118" rx="8"/>
+  <text class="t" x="146" y="374" text-anchor="middle">runCoordinator &#183; every instance</text>
+  <text class="s" x="146" y="394" text-anchor="middle">franz-go group "rotme-engine-leader"</text>
+  <text class="s" x="146" y="410" text-anchor="middle">on game.session (1 partition)</text>
+  <text class="s" x="146" y="428" text-anchor="middle">assigned p0 &#8594; start runLeader</text>
+  <text class="s" x="146" y="444" text-anchor="middle">revoked p0 &#8594; cancel it</text>
+  <text class="s" x="146" y="462" text-anchor="middle">term: ctx.Done</text>
+
+  <rect class="box lead" x="312" y="352" width="316" height="132" rx="8"/>
+  <text class="t" x="470" y="374" text-anchor="middle">runLeader &#183; LEADER ONLY &#183; select loop</text>
+  <text class="s" x="470" y="394" text-anchor="middle">owns the authoritative World</text>
+  <text class="s" x="470" y="412" text-anchor="middle">in: startCh(1) validatedCh(100)</text>
+  <text class="s" x="470" y="428" text-anchor="middle">advanceCh(4) turn ticker(30s)</text>
+  <text class="s" x="470" y="450" text-anchor="middle">term: leadership revoked (leader ctx)</text>
+  <text class="s" x="470" y="466" text-anchor="middle">or ctx.Done &#8594; close raw + validated consumers</text>
+  <line class="flow dash" x1="284" y1="410" x2="312" y2="410" marker-end="url(#arr2)"/><text class="el" x="250" y="345">promote / cancel</text>
+
+  <rect class="box" x="660" y="352" width="224" height="132" rx="8"/>
+  <text class="t" x="772" y="374" text-anchor="middle">http.Server &#183; every instance</text>
+  <text class="s" x="772" y="394" text-anchor="middle">REST + SSE handlers</text>
+  <text class="s" x="772" y="412" text-anchor="middle">reads: hub.StateView / Analyze</text>
+  <text class="s" x="772" y="430" text-anchor="middle">writes: SubmitRaw / SubmitControl</text>
+  <text class="s" x="772" y="446" text-anchor="middle">&#8594; game.orders.raw</text>
+  <text class="s" x="772" y="466" text-anchor="middle">term: server.Shutdown(ctx)</text>
+  <line class="flow dash" x1="700" y1="352" x2="600" y2="296" marker-end="url(#arr2)"/><text class="el" x="606" y="330">subscribe / state / analysis</text>
+
+  <rect class="box" x="312" y="512" width="150" height="100" rx="8"/>
+  <text class="t" x="387" y="532" text-anchor="middle">runValidation</text>
+  <text class="s" x="387" y="550" text-anchor="middle">leader &#183; game.orders.raw</text>
+  <text class="s" x="387" y="566" text-anchor="middle">&#8594; validate (8 rules)</text>
+  <text class="s" x="387" y="582" text-anchor="middle">&#8594; validated / dlq</text>
+  <text class="s" x="387" y="602" text-anchor="middle">term: leader ctx</text>
+  <line class="flow" x1="400" y1="512" x2="430" y2="484" marker-end="url(#arr2)"/><text class="el" x="300" y="505">control &#8594; startCh(1)/advanceCh(4)</text>
+
+  <rect class="box" x="478" y="512" width="150" height="100" rx="8"/>
+  <text class="t" x="553" y="532" text-anchor="middle">runValidatedConsumer</text>
+  <text class="s" x="553" y="550" text-anchor="middle">leader</text>
+  <text class="s" x="553" y="566" text-anchor="middle">game.orders.validated</text>
+  <text class="s" x="553" y="582" text-anchor="middle">&#8594; validatedCh (100)</text>
+  <text class="s" x="553" y="602" text-anchor="middle">term: leader ctx</text>
+  <line class="flow" x1="553" y1="512" x2="540" y2="484" marker-end="url(#arr2)"/><text class="el" x="556" y="505">validatedCh (100)</text>
+</svg>
+<p>
+The leader is the only writer of the <code>World</code>. The validation goroutine never touches the <code>World</code>;
+it reads an immutable <code>ValidationState</code> snapshot the leader republishes after every turn (an
+<code>atomic.Pointer</code>), which removes the data race entirely. When an instance loses leadership its leader
+context is cancelled so the validation and turn-consumer goroutines return; when the process exits, the hub closes
+every SSE channel. Nothing is left running, which the goroutine count confirms after a game.
+</p>
+
+<h2 class="pagebreak">4. Kafka topics</h2>
+<p>The diagram shows the flow through the ten topics; the table below gives the exact producer, consumer and settings for each.</p>
+<svg class="dgm" viewBox="0 0 900 440" role="img" aria-label="Kafka topic flow">
+  <defs>
+    <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9aa3af"/>
+    </marker>
+  </defs>
+
+  <text class="t" x="80"  y="14" text-anchor="middle">Producers</text>
+  <text class="t" x="450" y="14" text-anchor="middle">Topics</text>
+  <text class="t" x="745" y="14" text-anchor="middle">Consumers</text>
+
+  <rect class="box brow" x="14" y="24" width="150" height="44" rx="8"/>
+  <text class="s" x="89" y="42" text-anchor="middle">API / browsers</text>
+  <text class="s" x="89" y="58" text-anchor="middle">(any instance)</text>
+  <rect class="box lead" x="14" y="104" width="150" height="276" rx="8"/>
+  <text class="t" x="89" y="240" text-anchor="middle">Leader</text>
+  <text class="s" x="89" y="258" text-anchor="middle">produces all</text>
+  <text class="s" x="89" y="272" text-anchor="middle">event/state topics</text>
+
+  <!-- topic pills -->
+  <g>
+    <rect class="topic" x="320" y="24"  width="260" height="30" rx="6"/><text class="s" x="450" y="43"  text-anchor="middle">game.orders.raw &#183; key playerId</text>
+    <rect class="topic" x="320" y="64"  width="260" height="30" rx="6"/><text class="s" x="450" y="83"  text-anchor="middle">game.orders.validated &#183; key unitId</text>
+    <rect class="topic" x="320" y="104" width="260" height="30" rx="6"/><text class="s" x="450" y="123" text-anchor="middle">game.events.unit &#183; key unitId</text>
+    <rect class="topic" x="320" y="144" width="260" height="30" rx="6"/><text class="s" x="450" y="163" text-anchor="middle">game.events.region &#183; key regionId</text>
+    <rect class="topic" x="320" y="184" width="260" height="30" rx="6"/><text class="s" x="450" y="203" text-anchor="middle">game.events.path &#183; key pathId</text>
+    <rect class="topic" x="320" y="224" width="260" height="30" rx="6"/><text class="s" x="450" y="243" text-anchor="middle">game.broadcast &#183; single partition</text>
+    <rect class="topic" x="320" y="264" width="260" height="30" rx="6"/><text class="s" x="450" y="283" text-anchor="middle">game.ring.position &#183; single partition</text>
+    <rect class="topic" x="320" y="304" width="260" height="30" rx="6"/><text class="s" x="450" y="323" text-anchor="middle">game.ring.detection &#183; key playerId</text>
+    <rect class="topic" x="320" y="344" width="260" height="30" rx="6"/><text class="s" x="450" y="363" text-anchor="middle">game.session &#183; compacted</text>
+    <rect class="topic" x="320" y="384" width="260" height="30" rx="6"/><text class="s" x="450" y="403" text-anchor="middle">game.dlq &#183; key errorCode</text>
+  </g>
+
+  <!-- consumers -->
+  <rect class="box" x="620" y="24"  width="266" height="62" rx="8"/>
+  <text class="t" x="753" y="46" text-anchor="middle">Leader pipeline</text>
+  <text class="s" x="753" y="64" text-anchor="middle">validation + turn processor</text>
+  <rect class="box" x="620" y="104" width="266" height="214" rx="8"/>
+  <text class="t" x="753" y="150" text-anchor="middle">Hubs &#183; all instances</text>
+  <text class="s" x="753" y="170" text-anchor="middle">build read cache, fan out to SSE</text>
+  <text class="s" x="753" y="200" text-anchor="middle">Light gets ring.position</text>
+  <text class="s" x="753" y="216" text-anchor="middle">Dark gets ring.detection</text>
+  <text class="s" x="753" y="236" text-anchor="middle">broadcast &amp; events &#8594; both</text>
+  <text class="s" x="753" y="252" text-anchor="middle">(Ring region stripped for Dark)</text>
+  <rect class="box" x="620" y="336" width="266" height="40" rx="8"/>
+  <text class="s" x="753" y="361" text-anchor="middle">Leader-election group (promotes leader)</text>
+  <rect class="box" x="620" y="392" width="266" height="34" rx="8"/>
+  <text class="s" x="753" y="413" text-anchor="middle">DLQ tooling / operators</text>
+
+  <!-- producer arrows -->
+  <line class="flow" x1="164" y1="46"  x2="320" y2="39"  marker-end="url(#arr3)"/>
+  <line class="flow" x1="164" y1="120" x2="320" y2="79"  marker-end="url(#arr3)"/>
+  <line class="flow" x1="164" y1="140" x2="320" y2="119" marker-end="url(#arr3)"/>
+  <line class="flow" x1="164" y1="165" x2="320" y2="159" marker-end="url(#arr3)"/>
+  <line class="flow" x1="164" y1="190" x2="320" y2="199" marker-end="url(#arr3)"/>
+  <line class="flow" x1="164" y1="215" x2="320" y2="239" marker-end="url(#arr3)"/>
+  <line class="flow" x1="164" y1="250" x2="320" y2="279" marker-end="url(#arr3)"/>
+  <line class="flow" x1="164" y1="285" x2="320" y2="319" marker-end="url(#arr3)"/>
+  <line class="flow" x1="164" y1="330" x2="320" y2="359" marker-end="url(#arr3)"/>
+  <line class="flow" x1="164" y1="362" x2="320" y2="399" marker-end="url(#arr3)"/>
+
+  <!-- consumer arrows -->
+  <line class="flow" x1="580" y1="39"  x2="620" y2="48"  marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="79"  x2="620" y2="66"  marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="119" x2="620" y2="150" marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="159" x2="620" y2="170" marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="199" x2="620" y2="190" marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="239" x2="620" y2="210" marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="279" x2="620" y2="232" marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="319" x2="620" y2="250" marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="359" x2="620" y2="280" marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="359" x2="620" y2="356" marker-end="url(#arr3)"/>
+  <line class="flow" x1="580" y1="399" x2="620" y2="409" marker-end="url(#arr3)"/>
+</svg>
+<table>
+<tr><th>Topic</th><th>Key</th><th>Part.</th><th>Repl.</th><th>Cleanup</th><th>Produced by</th><th>Consumed by</th></tr>
+<tr><td>game.orders.raw</td><td>playerId</td><td>3</td><td>3</td><td>delete 1h</td><td>API (order intake, control)</td><td>leader validation</td></tr>
+<tr><td>game.orders.validated</td><td>unitId</td><td>6</td><td>3</td><td>delete 1h</td><td>leader validation + enrichment</td><td>leader turn processor</td></tr>
+<tr><td>game.events.unit</td><td>unitId</td><td>6</td><td>3</td><td>delete 7d</td><td>leader</td><td>all hubs (SSE/cache)</td></tr>
+<tr><td>game.events.region</td><td>regionId</td><td>6</td><td>3</td><td>delete 7d</td><td>leader</td><td>all hubs</td></tr>
+<tr><td>game.events.path</td><td>pathId</td><td>6</td><td>3</td><td>delete 7d</td><td>leader</td><td>all hubs</td></tr>
+<tr><td>game.session</td><td>-</td><td>1</td><td>3</td><td>compact</td><td>leader</td><td>leader-election group</td></tr>
+<tr><td>game.broadcast</td><td>-</td><td>1</td><td>3</td><td>delete 1h</td><td>leader (snapshot + GameOver txn)</td><td>all hubs</td></tr>
+<tr><td>game.ring.position</td><td>-</td><td>1</td><td>3</td><td>delete 1h</td><td>leader</td><td>Light SSE only</td></tr>
+<tr><td>game.ring.detection</td><td>playerId</td><td>2</td><td>3</td><td>delete 1h</td><td>leader</td><td>Dark SSE only</td></tr>
+<tr><td>game.dlq</td><td>errorCode</td><td>3</td><td>3</td><td>delete 7d</td><td>leader validation</td><td>operators</td></tr>
+</table>
+<p>
+<strong>Partition-key rationale.</strong> Orders are keyed by <code>playerId</code> so one player's submissions keep their
+relative order. Validated orders and unit events are keyed by <code>unitId</code> so everything about a single unit lands
+on one partition in order. Region and path events are keyed by their entity id for the same reason. The single-partition
+topics (<code>game.session</code>, <code>game.broadcast</code>, <code>game.ring.position</code>) carry global, totally-ordered
+state where partitioning would only create races. <code>game.session</code> is log-compacted so it always retains the latest
+session record, which is what the leader-election group consumes.
+</p>
+<p>
+<strong>Information hiding.</strong> The Ring Bearer's true position only ever travels on <code>game.ring.position</code>,
+which the hub forwards to Light clients only. <code>game.broadcast</code> snapshots carry the Ring Bearer's region as the
+empty string. So the Dark browser physically never receives the position over any channel.
+</p>
+<p>
+<strong>Schema evolution &amp; exactly-once.</strong> <code>OrderValidated</code> is registered V1, then a backward-compatible
+V2 adds a nullable <code>routeRiskScore</code> (default null) - V1 consumers keep working. The <code>GameOver</code> event is
+produced inside a Kafka transaction with an idempotent producer, so it appears on <code>game.broadcast</code> exactly once
+even if the leader crashes mid-publish (the transaction either commits once or aborts).
+</p>
+
+<h2>5. Order validation and route-risk (the two topologies)</h2>
+<p>
+Topology 1 (validation) and Topology 2 (route-risk enrichment) are implemented as ordinary Go consumer logic rather than
+the JVM Kafka Streams library, which keeps the whole project in one language. The leader consumes
+<code>game.orders.raw</code>, validates each order against its in-memory state (which is exactly the KTable the spec
+describes), and writes the result to <code>game.orders.validated</code> or, on failure, <code>game.dlq</code> with the
+matching error code. Route orders are then enriched: the leader computes the risk score
+(region threat + surveillance·3 + blocked·5 + threatened·2 + nazgul-proximity·2) and re-emits the record with
+<code>routeRiskScore</code> set.
+</p>
+
+<h2>6. Paradigm justification</h2>
+<h3>Why Go fits this problem</h3>
+<p>
+The game is a stream of small, independent messages - orders in, events out - with a single authoritative reducer (the
+turn). Go's goroutines-and-channels model maps onto this directly: a consumer goroutine per topic, an owner goroutine per
+piece of state, and channels as the only way in. Making the application tier stateless and pushing all durable state into
+Kafka means fault tolerance is mostly free: a dead instance is just a consumer-group member that left, and Kafka's
+rebalance protocol does the rest. We did not have to build our own clustering or replication.
+</p>
+<h3>What was genuinely harder than with actors</h3>
+<p>
+Single-writer ownership of the world. Akka gives you a cluster singleton out of the box; in Go we had to build leader
+election ourselves (a single-partition consumer group) and make sure only the leader runs turn processing. Recovering an
+in-progress game after a failover is also manual: there is no actor with persisted state to rehydrate, so every turn the
+leader writes the full world to the compacted <code>game.session</code> topic, and a promoted leader rebuilds from the
+latest such record. The subtle part is that this record has to carry the Ring Bearer's route, which is secret, so it goes
+on <code>game.session</code> (never forwarded to a browser) rather than on the broadcast snapshot the Dark side reads.
+</p>
+<h3>How actors would solve the two hardest parts</h3>
+<p>
+Single-writer state: Akka's <code>RingBearerActor</code>/<code>WorldStateActor</code> cluster singletons are the leader by
+construction, so the election we hand-rolled disappears. Recovery: Akka Persistence event-sources each actor, so a crashed
+singleton restarts and replays its own journal to the exact pre-crash state, routes included - no snapshot-shaped data loss.
+The cost is the opposite of ours: state is bound to the actor and the framework, the cluster has to be configured and reasoned
+about, and the JVM footprint is larger.
+</p>
+
+<h2>7. Reflection</h2>
+<p>
+The part that took the most rethinking was the boundary between "state lives in the app" and "state lives in Kafka". Early
+on the engine simply held the world in memory and that was the truth; everything was easy and the tests flew. The moment we
+introduced three instances, that assumption broke. Two questions appeared that had not existed before: who is allowed to
+mutate the world, and where does a newly-promoted instance get its starting point? The first we answered with leader election
+over a single-partition topic, which is a small amount of code but a large amount of careful thinking about the assignment and
+revocation callbacks running on a different goroutine than the leader loop. The second we answered by having every instance
+keep a read-only world cache rebuilt from the broadcast topic, so a promoted leader already has something to adopt.
+</p>
+<p>
+What surprised us was how much the information-hiding requirement shaped the topic design rather than the code. It is tempting
+to strip the Ring Bearer's position in a handler somewhere, but the robust answer is to never let it travel on a channel the
+Dark side reads: the position has its own topic, and the shared snapshot carries an empty string. Once the topics were right,
+the code that enforces the rule became a one-line switch, and the race test that proves the Dark view is always empty passed
+without drama. We came to see information hiding as a data-flow property, not a code property.
+</p>
+<p>
+If we designed it again we would separate the read cache and the leader's authoritative world into clearly different types
+from the start, instead of reusing the same struct, because conflating them cost us an afternoon of confusion about which
+copy was the source of truth. We would also decide up front which state is secret and which is public, because that one
+distinction is what determines whether a piece of data may travel on the broadcast topic or has to ride the private session
+topic; we learned it by first putting the Ring's route on the wrong channel. The biggest lesson was that in a Kafka-centred
+design, most of the hard problems are decided by where a piece of data is keyed and which topic it flows on; the Go code
+that consumes it is almost an afterthought once those choices are right.
+</p>
+
+
+<h2 class="pagebreak">Appendix - How to run</h2>
+<pre>
+# from the repo root (Windows + Docker Desktop)
+powershell -File scripts/up.ps1        # or: make up   -> builds + starts everything
+#   Light browser: http://localhost:8080/?side=light
+#   Dark  browser: http://localhost:8080/?side=dark
+#   Kafka UI:      http://localhost:8088
+
+powershell -File scripts/test.ps1      # or: make test       (unit tests, no Docker)
+powershell -File scripts/test-race.ps1 # or: make test-race  (router race tests in a Linux container)
+
+# fault tolerance demo
+docker stop go-2        # if go-2 is the leader, another instance is promoted and recovers from Kafka
+docker start go-2       # rejoins the consumer group
+</pre>
+
+</body>
+</html>

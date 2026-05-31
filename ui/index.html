@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ring of the Middle Earth</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="title">Ring of the Middle Earth</div>
+    <div class="status">
+      <span id="sideBadge" class="badge">LIGHT SIDE</span>
+      <span id="turn" class="turn">Turn —</span>
+      <span id="conn" class="conn off">offline</span>
+    </div>
+    <div class="controls">
+      <button id="startBtn">Start Game</button>
+      <button id="advanceBtn" class="ghost">Advance Turn</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <main>
+    <section class="map-wrap">
+      <svg id="map" viewBox="0 0 1400 1010" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="1" dy="3" stdDeviation="3" flood-opacity="0.30" />
+          </filter>
+          <filter id="box-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-opacity="0.20" />
+          </filter>
+          <g id="icon-plains"><path d="M-8 4 L8 4 M-5 4 L-7 -2 M0 4 L0 -4 M5 4 L7 -2" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></g>
+          <g id="icon-swamp"><path d="M-10 1 Q-5 -3 0 1 T10 1 M-8 6 Q-4 2 1 6 T9 6" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></g>
+          <g id="icon-mountains"><path d="M-12 6 L-4 -8 L2 2 M-2 6 L6 -10 L14 6" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+          <g id="icon-forest"><path d="M0 -10 L-7 2 L-3 2 L-9 12 L9 12 L3 2 L7 2 Z" fill="#fff"/></g>
+          <g id="icon-fortress"><path d="M-9 -6 L-9 8 L9 8 L9 -6 L5 -6 L5 -2 L-5 -2 L-5 -6 Z" fill="#fff"/></g>
+          <g id="icon-volcanic"><path d="M-11 8 L-4 -4 L4 -4 L11 8 Z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="M-3 -8 Q0 -13 3 -8" fill="none" stroke="#ffdd59" stroke-width="2.5" stroke-linecap="round"/></g>
+          <radialGradient id="ringGlow"><stop offset="55%" stop-color="#f6b73c" stop-opacity="0"/><stop offset="100%" stop-color="#f6b73c" stop-opacity="0.85"/></radialGradient>
+        </defs>
+
+        <rect width="1400" height="1010" fill="#f8f5eb"/>
+
+        <g id="map-content" transform="translate(0,20)">
+          <g id="edges"></g>
+          <g id="nodes"></g>
+          <g id="overlay"><g id="badges"></g><g id="fx"></g></g>
+        </g>
+
+        <g id="legends" transform="translate(60,830)">
+          <g transform="translate(0,0)">
+            <rect width="230" height="150" rx="10" fill="#fff" stroke="#e3e1d6" filter="url(#box-shadow)"/>
+            <text x="16" y="28" class="lg-title">Region control</text>
+            <circle cx="26" cy="58" r="9" fill="#4b7bec" stroke="#fff" stroke-width="1.5"/><text x="46" y="63" class="lg-tx">Free Peoples</text>
+            <circle cx="26" cy="88" r="9" fill="#eb3b5a" stroke="#fff" stroke-width="1.5"/><text x="46" y="93" class="lg-tx">Shadow</text>
+            <circle cx="26" cy="118" r="9" fill="#a5b1c2" stroke="#fff" stroke-width="1.5"/><text x="46" y="123" class="lg-tx">Neutral</text>
+          </g>
+
+          <g transform="translate(260,0)">
+            <rect width="330" height="150" rx="10" fill="#fff" stroke="#e3e1d6" filter="url(#box-shadow)"/>
+            <text x="16" y="28" class="lg-title">Paths</text>
+            <line x1="16" y1="52" x2="70" y2="52" stroke="#888" stroke-width="3"/><text x="82" y="57" class="lg-tx">Cost 1 (solid)</text>
+            <line x1="16" y1="80" x2="70" y2="80" stroke="#555" stroke-width="4" stroke-dasharray="8 8"/><text x="82" y="85" class="lg-tx">Cost 2 (dashed)</text>
+            <line x1="16" y1="108" x2="70" y2="108" stroke="#eb3b5a" stroke-width="6"/><text x="82" y="113" class="lg-tx">Blocked</text>
+            <line x1="180" y1="80" x2="234" y2="80" stroke="#4aa3df" stroke-width="5" stroke-dasharray="7 5"/><text x="246" y="85" class="lg-tx">Temp-open</text>
+            <line x1="180" y1="108" x2="234" y2="108" stroke="#0f9b8e" stroke-width="4" stroke-dasharray="2 6"/><text x="246" y="113" class="lg-tx">Surveilled</text>
+          </g>
+
+          <g transform="translate(620,0)">
+            <rect width="470" height="150" rx="10" fill="#fff" stroke="#e3e1d6" filter="url(#box-shadow)"/>
+            <text x="16" y="28" class="lg-title">Terrain</text>
+            <g transform="translate(30,58)"><circle r="13" fill="#7f8fa6"/><use href="#icon-plains" transform="scale(0.62)"/><text x="22" y="5" class="lg-tx">Plains</text></g>
+            <g transform="translate(30,90)"><circle r="13" fill="#7f8fa6"/><use href="#icon-swamp" transform="scale(0.62)"/><text x="22" y="5" class="lg-tx">Swamp</text></g>
+            <g transform="translate(30,122)"><circle r="13" fill="#7f8fa6"/><use href="#icon-mountains" transform="scale(0.62)"/><text x="22" y="5" class="lg-tx">Mountains</text></g>
+            <g transform="translate(250,58)"><circle r="13" fill="#7f8fa6"/><use href="#icon-forest" transform="scale(0.62)"/><text x="22" y="5" class="lg-tx">Forest</text></g>
+            <g transform="translate(250,90)"><circle r="13" fill="#7f8fa6"/><use href="#icon-fortress" transform="scale(0.62)"/><text x="22" y="5" class="lg-tx">Fortress</text></g>
+            <g transform="translate(250,122)"><circle r="13" fill="#7f8fa6"/><use href="#icon-volcanic" transform="scale(0.62)"/><text x="22" y="5" class="lg-tx">Volcanic</text></g>
+          </g>
+        </g>
+      </svg>
+    </section>
+
+    <aside class="panel">
+      <div class="card">
+        <h2>Give an order</h2>
+        <label>Unit<select id="unitSelect"></select></label>
+        <label>Order<select id="orderType"></select></label>
+        <label id="targetRow">Target<select id="orderTarget"></select></label>
+        <button id="submitOrder">Submit order</button>
+        <div id="orderMsg" class="msg"></div>
+      </div>
+
+      <div class="card">
+        <h2 id="analysisTitle">Route risk</h2>
+        <button id="analysisBtn" class="ghost">Refresh analysis</button>
+        <div id="analysis"></div>
+      </div>
+
+      <div class="card log-card">
+        <h2>Events</h2>
+        <div id="log" class="log"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>

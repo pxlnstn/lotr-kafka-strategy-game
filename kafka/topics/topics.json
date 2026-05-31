@@ -1,0 +1,12 @@
+[
+  { "name": "game.orders.raw",       "partitions": 3, "replication": 3, "cleanup": "delete",  "retentionMs": 3600000,   "key": "playerId" },
+  { "name": "game.orders.validated", "partitions": 6, "replication": 3, "cleanup": "delete",  "retentionMs": 3600000,   "key": "unitId" },
+  { "name": "game.events.unit",      "partitions": 6, "replication": 3, "cleanup": "delete",  "retentionMs": 604800000, "key": "unitId" },
+  { "name": "game.events.region",    "partitions": 6, "replication": 3, "cleanup": "delete",  "retentionMs": 604800000, "key": "regionId" },
+  { "name": "game.events.path",      "partitions": 6, "replication": 3, "cleanup": "delete",  "retentionMs": 604800000, "key": "pathId" },
+  { "name": "game.session",          "partitions": 1, "replication": 3, "cleanup": "compact", "retentionMs": null,      "key": "-" },
+  { "name": "game.broadcast",        "partitions": 1, "replication": 3, "cleanup": "delete",  "retentionMs": 3600000,   "key": "-" },
+  { "name": "game.ring.position",    "partitions": 1, "replication": 3, "cleanup": "delete",  "retentionMs": 3600000,   "key": "-" },
+  { "name": "game.ring.detection",   "partitions": 2, "replication": 3, "cleanup": "delete",  "retentionMs": 3600000,   "key": "playerId" },
+  { "name": "game.dlq",              "partitions": 3, "replication": 3, "cleanup": "delete",  "retentionMs": 604800000, "key": "errorCode" }
+]
