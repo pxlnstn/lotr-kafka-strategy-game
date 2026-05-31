@@ -47,6 +47,8 @@ x-engine: &engine
     dockerfile: option-b/Dockerfile
   image: rotme-engine:latest
   networks: [rotme]
+  volumes:
+    - ./ui:/app/ui:ro
   depends_on:
     schema-registry: {condition: service_healthy}
   environment:

@@ -266,10 +266,53 @@ async function loadAvailableOrders() {
   renderTargets();
 }
 
+function unitRegionUI(unitId) {
+  if (unitCfg[unitId] && unitCfg[unitId].class === "RingBearer") return state.ringBearerRegion || "the-shire";
+  const u = (state.units || []).find((x) => x.unitId === unitId);
+  return u ? u.region : "";
+}
+
+// Shortest path (by traversal cost) between two regions, as a list of path ids.
+function shortestRoute(from, to) {
+  if (!from || from === to) return [];
+  const dist = {}, prevPath = {}, prevNode = {};
+  MAP.regions.forEach((r) => (dist[r.id] = Infinity));
+  dist[from] = 0;
+  const pq = [[0, from]];
+  while (pq.length) {
+    pq.sort((a, b) => a[0] - b[0]);
+    const [d, u] = pq.shift();
+    if (u === to) break;
+    if (d > dist[u]) continue;
+    MAP.paths.forEach((p) => {
+      const nb = p.from === u ? p.to : (p.to === u ? p.from : null);
+      if (nb && d + p.cost < dist[nb]) { dist[nb] = d + p.cost; prevPath[nb] = p.id; prevNode[nb] = u; pq.push([dist[nb], nb]); }
+    });
+  }
+  if (dist[to] === Infinity) return null;
+  const route = [];
+  let cur = to;
+  while (cur !== from) { route.unshift(prevPath[cur]); cur = prevNode[cur]; }
+  return route;
+}
+
 function renderTargets() {
-  const opt = available.find((o) => o.orderType === $("orderType").value);
+  const type = $("orderType").value;
   const sel = $("orderTarget");
   sel.innerHTML = "";
+  // Route orders pick a DESTINATION region; the path is computed on submit.
+  if (type === "ASSIGN_ROUTE" || type === "REDIRECT_UNIT") {
+    const cur = unitRegionUI($("unitSelect").value);
+    $("targetRow").style.display = "block";
+    MAP.regions.filter((r) => r.id !== cur).forEach((r) => {
+      const o = document.createElement("option");
+      o.value = r.id; o.textContent = r.name;
+      sel.appendChild(o);
+    });
+    if ($("unitSelect").value === "ring-bearer") sel.value = "mount-doom";
+    return;
+  }
+  const opt = available.find((o) => o.orderType === type);
   const targets = (opt && opt.targets) || [];
   $("targetRow").style.display = targets.length ? "block" : "none";
   targets.forEach((t) => {
@@ -285,8 +328,16 @@ async function submitOrder() {
   const target = $("orderTarget").value;
   const order = { orderType, playerId: SIDE, unitId, turn: state.turn };
   switch (orderType) {
-    case "ASSIGN_ROUTE": order.pathIds = [target]; break;
-    case "REDIRECT_UNIT": order.newPathIds = [target]; break;
+    case "ASSIGN_ROUTE": {
+      const r = shortestRoute(unitRegionUI(unitId), target);
+      if (!r || !r.length) { $("orderMsg").textContent = "no route to " + target; return; }
+      order.pathIds = r; break;
+    }
+    case "REDIRECT_UNIT": {
+      const r = shortestRoute(unitRegionUI(unitId), target);
+      if (!r || !r.length) { $("orderMsg").textContent = "no route to " + target; return; }
+      order.newPathIds = r; break;
+    }
     case "BLOCK_PATH":
     case "SEARCH_PATH": order.pathId = target; break;
     case "MAIA_ABILITY": order.targetPathId = target; break;
