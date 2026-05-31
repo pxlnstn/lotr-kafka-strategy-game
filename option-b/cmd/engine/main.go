@@ -66,7 +66,7 @@ func main() {
 // newEngineWithRetry waits for Kafka/Schema Registry to be reachable on startup.
 func newEngineWithRetry(cfg *config.Config, brokers []string, srURL string, turnSeconds int) (*engine.Engine, error) {
 	var lastErr error
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 150; i++ {
 		eng, err := engine.New(cfg, brokers, srURL, turnSeconds)
 		if err == nil {
 			return eng, nil

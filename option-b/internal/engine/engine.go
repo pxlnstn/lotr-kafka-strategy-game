@@ -166,8 +166,12 @@ func (e *Engine) startGame(id string) {
 	e.world = game.NewWorld(e.cfg)
 	e.buffer = map[string]game.Order{}
 	e.refreshValState()
-	e.publishSnapshot(context.Background())
-	e.publishSession(context.Background())
+	ctx := context.Background()
+	e.publishSnapshot(ctx)
+	e.publishSession(ctx)
+	// Tell the Light side where the Ring starts, so its marker shows from turn 1.
+	e.publish(ctx, topicRingPosition, "RingBearerMoved", "light",
+		ringMovedMsg{TrueRegion: e.world.Ring.TrueRegion, Turn: e.world.Turn, Timestamp: nowMs()})
 	log.Printf("[%s] game started at turn %d", e.instanceID, e.world.Turn)
 }
 
