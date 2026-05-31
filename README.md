@@ -4,6 +4,9 @@ A two-player, turn-based strategy game on a Kafka event backbone. The Light
 player moves the Ring Bearer secretly toward Mount Doom; the Dark player hunts
 it. Two browsers, no AI player.
 
+The full game rules are in [docs/RULES.md](docs/RULES.md), and the system design
+is in [docs/architecture.pdf](docs/architecture.pdf).
+
 ## Technology choice
 
 Option B — Go. The game engine, the order-validation and route-risk services,
