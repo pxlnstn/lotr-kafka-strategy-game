@@ -67,7 +67,7 @@ async function boot() {
 
   $("startBtn").onclick = startGame;
   $("advanceBtn").onclick = () => fetch(`${API}/turn/advance`, { method: "POST" });
-  $("unitSelect").onchange = loadAvailableOrders;
+  $("unitSelect").onchange = () => loadAvailableOrders(false);
   $("orderType").onchange = renderTargets;
   $("submitOrder").onclick = submitOrder;
   $("analysisBtn").onclick = refreshAnalysis;
@@ -226,6 +226,7 @@ async function refreshState() {
   state = await (await fetch(`${API}/game/state?playerId=${SIDE}`)).json();
   $("turn").textContent = state.started ? `Turn ${state.turn}` : "Turn —";
   paintMap();
+  if (state.started) loadAvailableOrders(true); // keep the order list current as the game changes
   if (state.gameOver) showBanner(state.winner);
 }
 
@@ -252,9 +253,11 @@ function populateUnitSelect() {
 }
 
 let available = [];
-async function loadAvailableOrders() {
+async function loadAvailableOrders(preserve) {
   const unitId = $("unitSelect").value;
   if (!unitId) return;
+  const keepType = preserve ? $("orderType").value : null;
+  const keepTarget = preserve ? $("orderTarget").value : null;
   available = await (await fetch(`${API}/orders/available?unitId=${unitId}&playerId=${SIDE}`)).json();
   const sel = $("orderType");
   sel.innerHTML = "";
@@ -263,7 +266,12 @@ async function loadAvailableOrders() {
     opt.value = o.orderType; opt.textContent = o.orderType.replace(/_/g, " ");
     sel.appendChild(opt);
   });
+  if (keepType && available.some((o) => o.orderType === keepType)) sel.value = keepType;
   renderTargets();
+  if (keepTarget) {
+    const t = $("orderTarget");
+    if ([...t.options].some((o) => o.value === keepTarget)) t.value = keepTarget;
+  }
 }
 
 function unitRegionUI(unitId) {

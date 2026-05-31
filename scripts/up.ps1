@@ -27,6 +27,7 @@ Write-Host "`nCreating topics..." -ForegroundColor Cyan
 & "$root\scripts\create-topics.ps1" | Out-Null
 Write-Host "Registering schemas..." -ForegroundColor Cyan
 & "$root\scripts\register-schemas.ps1" | Out-Null
+& "$root\scripts\register-schema-v2.ps1" | Out-Null
 
 foreach ($svc in @("go-1", "go-2", "go-3")) { Wait-Healthy $svc 120 | Out-Null }
 
