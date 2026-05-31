@@ -35,8 +35,17 @@ func (s *Server) Handler() http.Handler {
 	if uiDir == "" {
 		uiDir = "../ui"
 	}
-	mux.Handle("/", http.FileServer(http.Dir(uiDir)))
+	mux.Handle("/", noCache(http.FileServer(http.Dir(uiDir))))
 	return withCORS(mux)
+}
+
+// noCache tells browsers not to cache the UI files, so a reload always serves
+// the latest version.
+func noCache(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		h.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) gameMap(w http.ResponseWriter, r *http.Request) {
