@@ -48,8 +48,10 @@ powershell -File scripts/test-race.ps1   # or: make test-race  — race tests in
 powershell -File scripts/down.ps1        # or: make down
 ```
 
-Click Start Game, pick a unit, choose an order and target, Submit, then Advance
-Turn (turns also tick automatically every 30s).
+Click Start Game, pick a unit, choose an order and target, Submit order, then
+click Advance Turn to play out each turn. For the Ring Bearer, choose Assign
+Route with Mount Doom as the destination and keep advancing - it walks there
+one region per turn; once it arrives, the Destroy Ring order appears.
 
 ## Fault tolerance
 

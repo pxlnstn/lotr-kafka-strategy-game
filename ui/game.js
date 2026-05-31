@@ -326,7 +326,10 @@ async function submitOrder() {
   const unitId = $("unitSelect").value;
   const orderType = $("orderType").value;
   const target = $("orderTarget").value;
-  const order = { orderType, playerId: SIDE, unitId, turn: state.turn };
+  // Use the freshest turn number so the order is not rejected as WRONG_TURN.
+  let curTurn = state.turn;
+  try { curTurn = (await (await fetch(`${API}/game/state?playerId=${SIDE}`)).json()).turn; } catch (e) {}
+  const order = { orderType, playerId: SIDE, unitId, turn: curTurn };
   switch (orderType) {
     case "ASSIGN_ROUTE": {
       const r = shortestRoute(unitRegionUI(unitId), target);

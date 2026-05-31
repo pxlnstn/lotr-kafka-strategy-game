@@ -54,7 +54,9 @@ x-engine: &engine
   environment:
     KAFKA_BROKERS: kafka1:19092,kafka2:19092,kafka3:19092
     SCHEMA_REGISTRY_URL: http://schema-registry:8081
-    TURN_SECONDS: "30"
+    # Turns advance when a player clicks Advance Turn. The auto-timer is set
+    # very long so it does not interfere with interactive play.
+    TURN_SECONDS: "100000"
     HTTP_ADDR: ":8080"
   healthcheck:
     test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/health"]
